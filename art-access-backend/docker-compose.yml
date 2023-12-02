@@ -1,0 +1,21 @@
+version: '3.1'
+
+services:
+
+  mongo:
+    container_name: db_mongo_container
+    image: mongo:3.6
+    entrypoint: [ "/usr/bin/mongod", "--smallfiles", "--bind_ip_all"]
+
+    ports:
+      - "27017:27017"
+
+  rabbitmq:
+    image: masstransit/rabbitmq
+    ports:
+      - 5672:5672
+      - 15672:15672
+    hostname: "rabbit1"
+    environment:
+      - RABBITMQ_DEFAULT_USER=admin
+      - RABBITMQ_DEFAULT_PASS=admin

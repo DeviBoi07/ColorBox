@@ -1,0 +1,40 @@
+{
+    "name": "artist-app",
+    "version": "1.0.1033",
+    "private": true,
+    "scripts": {
+        "dev": "next dev",
+        "build": "next build",
+        "start": "next start",
+        "lint": "next lint"
+    },
+    "dependencies": {
+        "@auth0/auth0-react": "^2.0.2",
+        "@colourbox/common": "*",
+        "@mui/lab": "^5.0.0-alpha.128",
+        "@stripe/react-stripe-js": "^2.1.1",
+        "@stripe/stripe-js": "^1.54.1",
+        "@types/node": "20.3.1",
+        "@types/react": "18.2.12",
+        "@types/react-dom": "18.2.5",
+        "@uiw/react-md-editor": "^3.20.10",
+        "constate": "^3.3.2",
+        "eslint": "8.42.0",
+        "eslint-config-next": "13.4.6",
+        "libphonenumber-js": "^1.10.34",
+        "next": "13.4.6",
+        "next-seo": "^6.1.0",
+        "react": "18.2.0",
+        "react-dom": "18.2.0",
+        "react-hot-toast": "^2.4.1",
+        "typescript": "5.1.3",
+        "yup": "^1.1.1"
+    },
+    "devDependencies": {
+        "@emotion/react": "^11.10.6",
+        "@emotion/styled": "^11.10.6",
+        "@mui/icons-material": "^5.11.16",
+        "@mui/material": "^5.12.1",
+        "ts-loader": "^9.4.3"
+    }
+}

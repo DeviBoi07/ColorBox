@@ -1,0 +1,22 @@
+{
+    "name": "art-access-frontend",
+    "private": "true",
+    "workspaces": {
+        "packages": [
+            "packages/artistApp",
+            "packages/scanApp",
+            "packages/common"
+        ]
+    },
+    "version": "1.0.992",
+    "scripts": {
+        "dev:artist": "yarn workspace artist-app dev",
+        "dev:scan": "yarn workspace scan-app dev",
+        "build:artist": "yarn workspace artist-app build",
+        "build:scan": "yarn workspace scan-app build",
+        "start:artist": "yarn workspace artist-app start"
+    },
+    "repository": "https://dev.azure.com/newearthart/colourBox/_git/art-access-frontend",
+    "author": "Trifan Grigore-Gabriel <greg@newearthart.tech>",
+    "license": "none"
+}

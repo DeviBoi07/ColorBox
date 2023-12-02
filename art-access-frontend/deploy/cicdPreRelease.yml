@@ -1,0 +1,56 @@
+# deploys the dev staging branch
+trigger:
+- pre-release
+
+pool:
+  name: NewEarthDOAgentPool
+  
+variables: 
+  tag: '1.0.$(Build.BuildId)'
+
+stages:
+- stage: deploy
+
+  jobs:
+  - job: deployImage
+
+    steps:
+    - checkout: self
+      persistCredentials: true
+
+    - script: |
+        cp $(Build.Repository.LocalPath)/.npmrc.cicd.template $(Build.Repository.LocalPath)/.npmrc
+
+      displayName: 'copy npmrc'
+      failOnStderr: true
+
+    - task: npmAuthenticate@0
+      inputs:
+        workingFile: .npmrc
+
+    - task: Docker@2
+      displayName: Login to ACR
+      inputs:
+        command: login
+        containerRegistry: 'myAzureContRegistryUsingPassword'
+
+    - script: |
+        FRONTEND_VER=`cat ./packages/artistApp/package.json | grep -m 1 version | sed 's/[^0-9.]//g'`
+        yarn install --frozen-lockfile
+        SERVER_VER=`npm list @colourbox/ac-server |grep -m 1 ac-server|grep -o 'ac-server@.*' |cut -f2- -d@`
+        echo "using server $SERVER_VER , frontend $FRONTEND_VER"
+        cp ./deploy/deployToPreRelease.yml $(Agent.TempDirectory)/toPreRelease.k8.yml
+        sed -i "s/__TAG__SERVER/$SERVER_VER/" $(Agent.TempDirectory)/toPreRelease.k8.yml
+        sed -i "s/__TAG__FRONTEND-ARTIST/$FRONTEND_VER/" $(Agent.TempDirectory)/toPreRelease.k8.yml
+
+      displayName: 'prepare kubectl file'
+#      failOnStderr: false
+
+    - task: Kubernetes@1
+      displayName: kubectl apply
+      inputs:
+        connectionType: Kubernetes Service Connection
+        kubernetesServiceEndpoint: do-ne-new-2
+        command: apply
+        arguments: -f $(Agent.TempDirectory)/toPreRelease.k8.yml    
+

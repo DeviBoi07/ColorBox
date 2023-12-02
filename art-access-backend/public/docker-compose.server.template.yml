@@ -1,0 +1,20 @@
+# this is used to generate compose file for front end devs to run
+version: '3.1'
+
+services:
+
+  mongo:
+    image: mongo:3.6
+    entrypoint: [ "/usr/bin/mongod", "--smallfiles", "--bind_ip_all"]
+
+  ac-server:
+    image: newearthcb.azurecr.io/ac-server:__TAG__
+    environment:
+      - mongo__connectionString=mongodb://mongo?connect=direct
+      - auth__domain=dev-divine.us.auth0.com
+      - auth__audience=https://art-colourbox-api/
+      - app__allowCors=true
+      - ASPNETCORE_hostBuilder__reloadConfigOnChange=false
+    ports:
+      - 8080:80
+

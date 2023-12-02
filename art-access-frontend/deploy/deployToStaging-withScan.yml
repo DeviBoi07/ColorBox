@@ -1,0 +1,262 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: mongodb
+  namespace: art-access-staging
+spec:
+  clusterIP: None
+  ports:
+    - port: 27017
+  selector:
+    app: mongodb
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb-node
+  namespace: art-access-staging
+spec:
+  serviceName: mongodb
+  selector:
+    matchLabels:
+      app: mongodb
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+        - name: mongodb-node
+          image: mongo:3.6
+          command: ["/usr/bin/mongod", "--smallfiles", "--bind_ip_all"]
+          volumeMounts:
+            - mountPath: "/data/db"
+              name: mongo-data
+          ports:
+            - containerPort: 27017
+
+  volumeClaimTemplates:
+    - metadata:
+        name: mongo-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ac-server
+  namespace: art-access-staging
+  labels:
+    app: ac-server
+
+spec:
+  selector:
+    matchLabels:
+      app: ac-server
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: ac-server
+    spec:
+      imagePullSecrets:
+        - name: art-access-secret
+
+      containers:
+        - name: ac-server
+          image: newearthcb.azurecr.io/ac-server:1.0.974
+          # image: newearthcb.azurecr.io/ac-server:1.0.809
+
+          env:
+            - name: mongo__connectionString
+              value: "mongodb://mongodb?connect=direct"
+
+            - name: auth__domain
+              value: "dev-divine.us.auth0.com"
+
+            - name: auth__audience
+              value: "https://art-colourbox-api/"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ac-frontend-artist
+  namespace: art-access-staging
+  labels:
+    app: ac-frontend-artist
+
+spec:
+  selector:
+    matchLabels:
+      app: ac-frontend-artist
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: ac-frontend-artist
+    spec:
+      imagePullSecrets:
+        - name: art-access-secret
+
+      containers:
+        - name: ac-frontend-artist
+          image: newearthcb.azurecr.io/ac-frontend-artist:__TAG__FRONTEND-ARTIST
+
+          env:
+            - name: VITE_AC_API_URL
+              value: "https://artist-artaccess.staging.newearthart.tech"
+
+            - name: VITE_AUTH0_DOMAIN
+              value: "dev-divine.us.auth0.com"
+
+            - name: VITE_AUTH0_CLIENT_ID
+              value: "kbNMJ5OAyWXJigbZCzqLnzAcCtgpwoCN"
+
+            - name: VITE_AUTH0_REDIRECT_URI
+              value: "https://artist-artaccess.staging.newearthart.tech"
+
+            - name: VITE_AUDIENCE
+              value: "https://art-colourbox-api/"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ac-frontend-scan
+  namespace: art-access-staging
+  labels:
+    app: ac-frontend-scan
+
+spec:
+  selector:
+    matchLabels:
+      app: ac-frontend-scan
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: ac-frontend-scan
+    spec:
+      imagePullSecrets:
+        - name: art-access-secret
+
+      containers:
+        - name: ac-frontend-scan
+          image: newearthcb.azurecr.io/ac-frontend:__TAG__FRONTEND-SCAN
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ac-server
+  namespace: art-access-staging
+spec:
+  ports:
+    - name: http
+      port: 80
+  selector:
+    app: ac-server
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ac-frontend-artist
+  namespace: art-access-staging
+spec:
+  ports:
+    - name: http
+      port: 3000
+  selector:
+    app: ac-frontend-artist
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ac-frontend-scan
+  namespace: art-access-staging
+spec:
+  ports:
+    - name: http
+      port: 80
+  selector:
+    app: ac-frontend-scan
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: acartist-ingress
+  namespace: art-access-staging
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-nginx"
+    nginx.ingress.kubernetes.io/from-to-www-redirect: "true"
+spec:
+  tls:
+    - hosts:
+        - artist-artaccess.staging.newearthart.tech
+      secretName: acartist-tls
+
+  rules:
+    - host: artist-artaccess.staging.newearthart.tech
+      http:
+        paths:
+          - pathType: Prefix
+            path: "/"
+            backend:
+              service:
+                name: ac-frontend-artist
+                port:
+                  number: 3000
+
+          - pathType: Prefix
+            path: "/api"
+            backend:
+              service:
+                name: ac-server
+                port:
+                  number: 80
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: acscan-ingress
+  namespace: art-access-staging
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-nginx"
+    nginx.ingress.kubernetes.io/from-to-www-redirect: "true"
+spec:
+  tls:
+    - hosts:
+        - scan-artaccess.staging.newearthart.tech
+      secretName: acscan-tls
+
+  rules:
+    - host: scan-artaccess.staging.newearthart.tech
+      http:
+        paths:
+          - pathType: Prefix
+            path: "/"
+            backend:
+              service:
+                name: ac-frontend-scan
+                port:
+                  number: 80
+
+          - pathType: Prefix
+            path: "/api"
+            backend:
+              service:
+                name: ac-server
+                port:
+                  number: 80

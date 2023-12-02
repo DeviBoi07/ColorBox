@@ -1,0 +1,82 @@
+# deploys the dev staging branch
+trigger:
+- main
+
+pool:
+  name: NewEarthDOAgentPool
+  
+variables: 
+  tag: '1.0.$(Build.BuildId)'
+
+stages:
+- stage: buildImage
+
+  jobs:
+  - job: buildDockerImage
+
+    steps:
+    - checkout: self
+      persistCredentials: true
+
+    - script: |
+        cp $(Build.Repository.LocalPath)/.npmrc.cicd.template $(Build.Repository.LocalPath)/.npmrc
+
+      displayName: 'copy npmrc'
+      failOnStderr: true
+
+    - task: npmAuthenticate@0
+      inputs:
+        workingFile: .npmrc
+
+    - task: Docker@2
+      displayName: Login to ACR
+      inputs:
+        command: login
+        containerRegistry: 'myAzureContRegistryUsingPassword'
+
+    - script: "docker pull newearthcb.azurecr.io/ac-frontend-artist:latest"
+      displayName: Pull latest for layer caching
+      continueOnError: true # for first build, no cache 
+
+    - task: Docker@2
+      displayName: docker build and push frontend-artist
+      inputs:
+        containerRegistry: 'myAzureContRegistryUsingPassword'
+        repository: 'ac-frontend-artist'
+        command: 'buildAndPush'
+        Dockerfile: './artist.Dockerfile'
+#        arguments: --cache-from=newearthcb.azurecr.io/ac-frontend-artist:latest  --build-arg VITE_AC_API_URL=$(VITE_AC_API_URL) --build-arg VITE_AUTH0_DOMAIN=$(VITE_AUTH0_DOMAIN) --build-arg VITE_AUTH0_CLIENT_ID=$(VITE_AUTH0_CLIENT_ID) --build-arg VITE_AUTH0_REDIRECT_URI=$(VITE_AUTH0_REDIRECT_URI) --build-arg VITE_AUDIENCE=$(VITE_AUDIENCE)
+        tags: |
+          $(tag)
+          latest
+
+    - script: |
+        cp ./deploy/deployToStaging.yml $(Agent.TempDirectory)/toStaging.ac.k8.yml
+        docker run --rm  --entrypoint=head newearthcb.azurecr.io/ac-frontend-artist:$(tag) -n 1 /ac-server-version | sed -i "s/__TAG__SERVER/$(</dev/stdin)/" $(Agent.TempDirectory)/toStaging.ac.k8.yml
+        sed -i "s/__TAG__FRONTEND-ARTIST/$(tag)/" $(Agent.TempDirectory)/toStaging.ac.k8.yml
+
+      displayName: 'copy kubectl file'
+      failOnStderr: true
+
+    - task: Kubernetes@1
+      displayName: kubectl apply
+      inputs:
+        connectionType: Kubernetes Service Connection
+        kubernetesServiceEndpoint: do-ne-new-2
+        command: apply
+        arguments: -f $(Agent.TempDirectory)/toStaging.ac.k8.yml
+
+    - script: |
+        yarn workspace artist-app version  --new-version $(tag) --no-git-tag-version
+
+      displayName: 'bump repo version'
+      failOnStderr: true
+
+    - script: |
+        git config user.email "cicd"
+        git config user.name "cicd"
+        git add .
+        git commit -m "updated package version to $(tag) [skip ci]"
+        git push origin HEAD:$(Build.SourceBranchName)
+   
+      displayName: 'push repo version'

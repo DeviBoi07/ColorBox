@@ -1,0 +1,26 @@
+# this is used to generate compose file for front end devs to run
+version: '3.1'
+
+services:
+
+  mongo:
+    image: mongo:3.6
+    entrypoint: [ "/usr/bin/mongod", "--smallfiles", "--bind_ip_all"]
+
+  ac-server:
+    image: newearthcb.azurecr.io/ac-server:__TAG__
+    environment:
+      - mongo__connectionString=mongodb://mongo?connect=direct
+      - app__allowCors=true
+      - ASPNETCORE_hostBuilder__reloadConfigOnChange=false
+    ports:
+      - 8080:80
+
+  rabbitmq:
+    image: masstransit/rabbitmq
+    hostname: "rabbit1"
+    environment:
+      - RABBITMQ_DEFAULT_USER=admin
+      - RABBITMQ_DEFAULT_PASS=admin
+
+

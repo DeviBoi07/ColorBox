@@ -1,0 +1,95 @@
+﻿trigger:
+  - main
+
+pool:
+  name: NewEarthDOAgentPool
+
+variables:
+  tag: "1.0.$(Build.BuildId)"
+  tmpInstance: "acserverinstance-$(Build.BuildId)"
+
+stages:
+  - stage: buildImage
+
+    jobs:
+      - job: buildDockerImage
+
+        steps:
+          - task: NuGetAuthenticate@0
+
+          - task: Docker@2
+            displayName: docker build
+            inputs:
+              containerRegistry: "myAzureContRegistryUsingPassword"
+              repository: "ac-server"
+              command: "build"
+              Dockerfile: "./Dockerfile"
+              arguments: "--build-arg FEED_ACCESSTOKEN=$(VSS_NUGET_ACCESSTOKEN)"
+              tags: $(tag)
+
+          - task: Docker@2
+            displayName: docker push
+            inputs:
+              containerRegistry: "myAzureContRegistryUsingPassword"
+              repository: "ac-server"
+              command: "push"
+              tags: $(tag)
+
+  - stage: buildPublic
+    jobs:
+      - job: buildNpm
+
+        steps:
+          - checkout: self
+            persistCredentials: true
+
+          - task: Docker@2
+            displayName: Login to ACR
+            inputs:
+              command: login
+              containerRegistry: "myAzureContRegistryUsingPassword"
+
+          - script: |
+              docker run --rm -v $(Build.BinariesDirectory):/dmount --entrypoint=cp newearthcb.azurecr.io/ac-server:$(tag) /app/swagger.yml /dmount/
+              docker run --rm -v $(Build.BinariesDirectory):/dmount -v $(Build.Repository.LocalPath)/public/src:/dout  openapitools/openapi-generator-cli generate -i /dmount/swagger.yml -o /dout -g typescript-axios
+
+            displayName: 'generate api from container'
+            failOnStderr: false
+
+          - task: Npm@1
+            displayName: "install"
+            inputs:
+              workingDir: ./public
+              command: install
+
+          - script: |
+              mkdir -p $(Build.Repository.LocalPath)/public/lib
+              cp $(Build.Repository.LocalPath)/public/docker-compose.server.template.yml $(Build.Repository.LocalPath)/public/lib/docker-compose.server.yml 
+              sed -i 's/__TAG__/$(tag)/' $(Build.Repository.LocalPath)/public/lib/docker-compose.server.yml
+
+            displayName: "update server docker compose"
+            failOnStderr: true
+
+          - task: Npm@1
+            displayName: "version"
+            inputs:
+              workingDir: ./public
+              command: custom
+              customCommand: version $(tag) --no-git-tag-version
+
+          - task: Npm@1
+            displayName: "publish"
+            inputs:
+              workingDir: ./public
+              command: publish
+              publishRegistry: useFeed
+              publishFeed: colourBox/ac-feed-1
+
+          - script: |
+              git config user.email "cicd"
+              git config user.name "cicd"
+              git add .
+              git commit -m "updated package version to $(tag) [skip ci]"
+              git push origin HEAD:$(Build.SourceBranchName)
+
+            displayName: "push version"
